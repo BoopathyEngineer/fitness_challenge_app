@@ -124,37 +124,61 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.post("/register/user")
 def register_user(member: MemberCreate, db: Session = Depends(get_db)):
+
+    if not member.email or not member.name or not member.password or not member.phone or not member.role:
+        raise HTTPException(status_code=400, detail="All fields (email, name, password, phone, role) must be provided")
+
     if member.role != "user":
         raise HTTPException(status_code=400, detail="Role must be 'user'")
-    db_member = Member(
-        phone=member.phone,
-        email=member.email,
-        name=member.name,
-        password=get_password_hash(member.password),
-        points=0,
-        role=member.role
-    )
-    db.add(db_member)
-    db.commit()
-    db.refresh(db_member)
-    return {"member_id": db_member.id, "status": "user registered"}
+    
+    existing_user = db.query(Member).filter(Member.email == member.email).first()
+    
+    if existing_user:
+        return {"success": False, "message": "Email already exists"}
+    else:
+        db_member = Member(
+            phone=member.phone,
+            email=member.email,
+            name=member.name,
+            password=get_password_hash(member.password),
+            points=0,
+            role=member.role
+        )
+        db.add(db_member)
+        db.commit()
+        db.refresh(db_member)
+        return {"member_id": db_member.id, "status": "user registered"}
 
 @app.post("/register/admin")
 def register_admin(member: MemberCreate, db: Session = Depends(get_db)):
+
+    if not member.email or not member.name or not member.password or not member.phone or not member.role:
+        raise HTTPException(status_code=400, detail="All fields (email, name, password, phone, role) must be provided")
     if member.role != "admin":
         raise HTTPException(status_code=400, detail="Role must be 'admin'")
-    db_member = Member(
-        phone=member.phone,
-        email=member.email,
-        name=member.name,
-        password=get_password_hash(member.password),
-        points=0,
-        role=member.role
-    )
-    db.add(db_member)
-    db.commit()
-    db.refresh(db_member)
-    return {"member_id": db_member.id, "status": "admin registered"}
+    
+    # Print the email for debugging
+    print(member.email)
+
+    # Correct query to filter by the provided member email
+    existing_user = db.query(Member).filter(Member.email == member.email).first()
+    
+    if existing_user:
+        return {"success": False, "message": "Email already exists"}
+    else:
+        db_member = Member(
+            phone=member.phone,
+            email=member.email,
+            name=member.name,
+            password=get_password_hash(member.password),
+            points=0,
+            role=member.role
+        )
+        db.add(db_member)
+        db.commit()
+        db.refresh(db_member)
+        return {"member_id": db_member.id, "status": "admin registered"}
+
 
 @app.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -178,7 +202,9 @@ def attempt_challenge(
     challenge_id: str = Form(...),
     current_member: Member = Depends(get_current_member),
     db: Session = Depends(get_db)
-):
+):  
+    if not challenge_id:
+        raise HTTPException(status_code=400, detail="Challenge ID is required")
     challenge = db.query(Challenge).filter(
         and_(
             Challenge.id == challenge_id,
@@ -208,7 +234,7 @@ def attempt_challenge(
 def get_profile(current_member: Member = Depends(get_current_member), db: Session = Depends(get_db)):
     completed_challenges = db.query(CompletedChallenge).filter_by(member_id=current_member.id).count()
     return {"name": current_member.name, "points": current_member.points, "completed_challenges": completed_challenges}
-
+from sqlalchemy import func
 @app.get("/leaderboard")
 def leaderboard(db: Session = Depends(get_db)):
     results = (
@@ -216,11 +242,12 @@ def leaderboard(db: Session = Depends(get_db)):
             Member.name.label("user_name"),
             Challenge.id.label("challenge_id"),
             Challenge.description.label("challenge_name"),
-            Challenge.points
+            func.sum(Challenge.points).label("total_points")
         )
         .join(CompletedChallenge, Member.id == CompletedChallenge.member_id)
         .join(Challenge, Challenge.id == CompletedChallenge.challenge_id)
-        .order_by(Member.points.desc())
+        .group_by(Member.id, Challenge.id)
+        .order_by(func.sum(Challenge.points).desc())  # Sort by total points
         .limit(10)
         .all()
     )
@@ -230,11 +257,12 @@ def leaderboard(db: Session = Depends(get_db)):
             "user_name": row.user_name,
             "challenge_id": row.challenge_id,
             "challenge_name": row.challenge_name,
-            "points": row.points
+            "points": row.total_points
         }
         for row in results
     ]
     return leaderboard_data
+
 @app.post("/admin/challenge")
 def create_challenge(
     id: str = Form(...),
