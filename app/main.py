@@ -160,10 +160,9 @@ def register_admin(member: MemberCreate, db: Session = Depends(get_db)):
     if member.role != "admin":
         raise HTTPException(status_code=400, detail="Role must be 'admin'")
     
-    # Print the email for debugging
+    
     print(member.email)
 
-    # Correct query to filter by the provided member email
     existing_user = db.query(Member).filter(Member.email == member.email).first()
     
     if existing_user:
