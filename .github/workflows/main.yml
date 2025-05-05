@@ -1,0 +1,44 @@
+name: Deploy FastAPI with AWS SAM
+
+on:
+  push:
+    branches: [main]  # Trigger deployment on push to the 'main' branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ap-south-1  # Change to your AWS region
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    - name: Install AWS SAM CLI
+      uses: aws-actions/setup-sam@v2
+      with:
+        version: 1.106.0
+
+    - name: Install dependencies
+      run: |
+        cd app
+        pip install -r requirements.txt -t .
+
+    - name: SAM Build
+      run: sam build
+
+    - name: SAM Deploy
+      run: |
+        sam deploy --no-confirm-changeset \
+                   --no-fail-on-empty-changeset \
+                   --stack-name fastapi-fitness-app \
+                   --capabilities CAPABILITY_IAM \
+                   --region ap-south-1  # Change to your region
