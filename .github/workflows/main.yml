@@ -41,4 +41,6 @@ jobs:
                    --no-fail-on-empty-changeset \
                    --stack-name fastapi-fitness-app \
                    --capabilities CAPABILITY_IAM \
-                   --region ap-south-1  # Change to your region
+                   --region ap-south-1 \
+                   --resolve-s3
+    
