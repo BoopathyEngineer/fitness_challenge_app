@@ -72,7 +72,10 @@ class ChallengeUpdate(BaseModel):
     description: str
     points: int
     challenge_date: date
-
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_new_password: str
 # Utility Functions
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -190,7 +193,29 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     refresh_token = create_access_token({"sub": str(member.id)}, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
 
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+@app.post("/change-password")
+def change_password(
+    change_data: ChangePasswordRequest,
+    current_member: Member = Depends(get_current_member), 
+    db: Session = Depends(get_db)
+):
 
+    if not verify_password(change_data.current_password, current_member.password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
+    if change_data.current_password == change_data.new_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password cannot be the same as the current password")
+    if change_data.new_password != change_data.confirm_new_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password and confirmation do not match")
+
+    if len(change_data.new_password) < 8: 
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be at least 8 characters long")
+
+    hashed_new_password = get_password_hash(change_data.new_password)
+
+    current_member.password = hashed_new_password
+    db.commit()
+
+    return {"status": "Password changed successfully"}
 @app.get("/challenges/today")
 def get_today_challenges(db: Session = Depends(get_db)):
     challenges = db.query(Challenge).filter(Challenge.challenge_date == date.today()).all()
